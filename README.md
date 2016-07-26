@@ -1,8 +1,8 @@
 # Node.js Intercept write streams
 
-> tapit captures or modifies a node js write stream.
+## tapit captures or modifies a node js write stream.
 
-> _<sup>Based on [this](https://gist.github.com/benbuckman/2758563) gist</sup>_
+## _Based on [intercept-stdout](github.com/sfarthin/intercept-stdout) by Steve Farthing_
 
 ## Capture
 ```javascript
