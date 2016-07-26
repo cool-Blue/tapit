@@ -1,0 +1,33 @@
+// Borrowed.
+// https://gist.github.com/benbuckman/2758563
+// Intercept writeStream to pass output thru callback.
+//
+//
+// returns an unhook() function, call when done intercepting
+module.exports = function(writeStream, tap) {
+
+    var old_writeStream_write = writeStream.write;
+
+    writeStream.write = (function(write) {
+        return function(string, encoding, fd) {
+            var args = [].slice.call(arguments);
+            args[0] = interceptor(string, tap);
+            write.apply(writeStream, args);
+        };
+    }(writeStream.write));
+
+    function interceptor(string, callback) {
+        // only intercept the string
+        var result = callback(string);
+        if(typeof result == 'string') {
+            string = result.replace(/\n$/, '') + (result && (/\n$/).test(string) ? '\n' : '');
+        }
+        return string;
+    }
+
+    // puts back to original
+    return function unhook() {
+        writeStream.write = old_writeStream_write;
+    };
+
+};
