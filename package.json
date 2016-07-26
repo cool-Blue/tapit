@@ -1,7 +1,7 @@
 {
   "name": "tapit",
   "version": "0.0.1",
-  "description": "Hooking Node.js streams. Addapted from intercept-stdout",
+  "description": "> tapit captures or modifies a node js write stream.",
   "main": "tapit.js",
   "directories": {
     "test": "test"
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sfarthin/intercept-stdout"
+    "url": "git+https://github.com/cool-Blue/tapit.git"
   },
   "keywords": [
     "stdout",
@@ -21,12 +21,12 @@
   "author": "Steven Farthing (modified by cool.blue)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/sfarthin/intercept-stdout/issues"
+    "url": "https://github.com/cool-Blue/tapit/issues"
   },
-  "dependencies": {
-  },
+  "dependencies": {},
   "devDependencies": {
     "chai": "~1.8.1",
     "mocha": "~1.17.1"
-  }
+  },
+  "homepage": "https://github.com/cool-Blue/tapit#readme"
 }
