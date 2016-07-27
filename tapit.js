@@ -4,7 +4,11 @@
 //
 //
 // returns an unhook() function, call when done intercepting
+var errors = {inputTypeError: new TypeError('tapit: input must be stream.Writable')};
 module.exports = function(writeStream, tap) {
+
+    if (!writeStream.write || !writeStream.writable)
+        throw errors.inputTypeError;
 
     var old_writeStream_write = writeStream.write;
 
@@ -31,3 +35,7 @@ module.exports = function(writeStream, tap) {
     };
 
 };
+
+if(process.env.NODE_ENV === 'test') {
+    module.exports.errors = errors;
+}

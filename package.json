@@ -1,13 +1,13 @@
 {
   "name": "tapit",
-  "version": "0.0.2",
-  "description": "> tapit captures or modifies a node js write stream.",
+  "version": "0.0.3",
+  "description": "tapit captures or modifies a node js write stream.",
   "main": "tapit.js",
   "directories": {
     "test": "test"
   },
   "scripts": {
-    "test": "mocha"
+    "test": "cross-env NODE_ENV=test mocha"
   },
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "cross-env": "^2.0.0",
     "chai": "~1.8.1",
     "mocha": "~1.17.1"
   },
