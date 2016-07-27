@@ -1,6 +1,6 @@
 {
   "name": "tapit",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "> tapit captures or modifies a node js write stream.",
   "main": "tapit.js",
   "directories": {
