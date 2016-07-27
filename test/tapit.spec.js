@@ -1,7 +1,6 @@
 var expect = require("chai").expect,
-    fs = require('fs'),
-    tapit = require("../tapit.js");
-
+    fs     = require('fs'),
+    tapit  = require("../tapit.js");
 
 describe("tapit", function() {
     describe("when passed a writable stream", function() {
@@ -99,18 +98,23 @@ describe("tapit", function() {
     })
     describe("when passed a readable stream", function() {
         [
-            {
-                name: 'stdin',
-                stream: function() {
-                    return process.stdin
-                }
+            /*
+             {
+             name: 'stdin',
+             stream: function() {
+             return process.stdin
+             }
 
-            },
+             },
+             */
             {
                 name: 'read stream',
                 inFile: './test/fixtures/input.txt',
                 stream: function() {
                     return fs.createReadStream(this.inFile)
+                },
+                inStream: function() {
+                    return fs.createWriteStream(this.inFile)
                 }
             }
 
@@ -118,23 +122,87 @@ describe("tapit", function() {
 
             describe('when ' + streamDescriptor.name + ' is passed as the first argument', function() {
 
-                var _stream;
+                var _stream, _inStream, _content;
 
-                beforeEach(function() {
+                describe('if ' + streamDescriptor.name + ' is in flowing mode', function() {
+
+/*
+                    try {
+                        fs.unlinkSync(streamDescriptor.inFile);
+                    } catch(e) {
+                        // just ignore it
+                    }
+
+                    _content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"].reduce(function(res, line) {
+                        return res + line + "\n";
+                    }, "");
+                    _content = _content.replace(/\n$/, "");
+                    _inStream = streamDescriptor.inStream();
+                    _inStream.write(_content);
+*/
+
                     _stream = streamDescriptor.stream();
-                });
 
-                it("should throw: " + tapit.errors.inputTypeError.message, function() {
+                    it("should capture " + streamDescriptor.name + " when initialized and not when it is unhooked", function() {
 
-                    // Lets set up our intercept
-                    expect(function(){
-                        tapit(_stream, function(txt) {
-                        captured_text += txt;
-                    })
-                    }).to.throw(tapit.errors.inputTypeError);
+                        // Lets set up our intercept
+                        var captured_text = "";
+                        var unhook = tapit(_stream, function(txt) {
+                            captured_text += txt;
+                        });
 
-                });
+                        // read from the console or the test file
+                        var readResult;
 
+                        // Make sure we don't see the captured text yet.
+                        expect(captured_text).to.not.have.string(_content);
+
+                        // read from the stream.
+                        readResult = _stream.read().toString();
+
+                        // Make sure we have the captured text.
+                        expect(captured_text).to.have.string(readResult);
+
+                        // Make sure the text is not captured after unhook
+
+                        unhook();
+                        captured_text = "";
+
+                        // send to the stream.
+                        readResult = _stream.read();
+
+                        // Make sure we have not captured text.
+                        expect(captured_text).to.be.equal("");
+
+                    });
+
+                    /*
+                     it("should modify output if callback returns a string", function() {
+
+                     var captured = [];
+                     var unhook = tapit(_stream, function(txt) {
+                     var mod = modified[captured.length];
+                     captured.push(mod);
+                     return mod;
+                     });
+
+                     var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
+                     var modified = ["print-this!", "asdf", ""];
+
+                     arr.forEach(function(txt) {
+                     // send to stdout.
+                     _stream.read(txt);
+                     // make sure captured doesn't contain the original text
+                     expect(captured).to.not.contain(txt);
+                     });
+
+                     expect(captured).to.eql(modified);
+
+                     unhook();
+
+                     });
+                     */
+                })
             });
         });
     })
