@@ -1,5 +1,6 @@
-var expect = require("chai").expect,
+const expect = require("chai").expect,
     fs     = require('fs'),
+    logEvents = require('@cool-blue/logevents')();
     tapit  = require("../tapit.js");
 
 describe("tapit", function() {
@@ -95,8 +96,64 @@ describe("tapit", function() {
                 });
             });
         });
-    })
+    });
     describe("when passed a readable stream", function() {
+
+        var content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
+
+        function reset(inFile, content, stream){
+
+            var _content;
+
+            //reset the test input
+            try {
+                fs.unlinkSync(inFile);
+            } catch(e) {
+                // just ignore it
+                console.warn("WARNING: inFile does not exist")
+            }
+
+            _content = content.reduce(function(res, line) {
+                return res + line + "\n";
+            }, "");
+            fs.writeFileSync(inFile, _content);
+
+            process.on('message', function(m){
+                console.log(m)
+            });
+
+            //return the file content for reference
+            return _content;
+        }
+
+        function readAll(next) {
+            var stream = this;
+            var body = "";
+
+            function readChunk (fromreadit) {
+                var chunk;
+                chunk = stream.read();
+                body += chunk;
+            }
+            function onClose(fromreadit){
+                next.bind(stream)(body)
+
+                this.removeListener('readable', readChunk);
+                this.removeListener('close', onClose);
+            }
+
+            this
+                .on('readable', ((onreadable) => {
+                    return readChunk
+                })())
+                .on('close', ((onclose) => {
+                    return onClose
+                })());
+
+            return this;
+        }
+
+
         [
             /*
              {
@@ -111,7 +168,14 @@ describe("tapit", function() {
                 name: 'read stream',
                 inFile: './test/fixtures/input.txt',
                 stream: function() {
-                    return fs.createReadStream(this.inFile)
+                    var s = fs.createReadStream(this.inFile);
+                    s.readAll = readAll;
+
+                    // log events from the Stream
+                    var streamEvents = ['pipe', 'unpipe', 'finish', 'cork', 'close', 'drain', 'error', 'end', 'readable'];
+                    logEvents.open((s.name = "stream", s), streamEvents);
+
+                    return s
                 },
                 inStream: function() {
                     return fs.createWriteStream(this.inFile)
@@ -122,86 +186,103 @@ describe("tapit", function() {
 
             describe('when ' + streamDescriptor.name + ' is passed as the first argument', function() {
 
-                var _stream, _inStream, _content;
-
                 describe('if ' + streamDescriptor.name + ' is in flowing mode', function() {
 
-/*
-                    try {
-                        fs.unlinkSync(streamDescriptor.inFile);
-                    } catch(e) {
-                        // just ignore it
-                    }
+                    describe("when the stream is not modified", function() {
 
-                    _content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"].reduce(function(res, line) {
-                        return res + line + "\n";
-                    }, "");
-                    _content = _content.replace(/\n$/, "");
-                    _inStream = streamDescriptor.inStream();
-                    _inStream.write(_content);
-*/
+                        var _stream, _content, desc,
 
-                    _stream = streamDescriptor.stream();
+                            scenarios = [
+                                {
+                                    returns: "doesn't return",
+                                    cb: function(captured_text) {
+                                        return function(txt) {
+                                            captured_text.content += txt;
+                                        }
+                                    }
+                                },
+                                {
+                                    returns: "returns",
+                                    cb: function(captured_text) {
+                                        return function(txt) {
+                                            captured_text.content += txt;
+                                            return txt
+                                        }
+                                    }
+                                }
+                            ];
 
-                    it("should capture " + streamDescriptor.name + " when initialized and not when it is unhooked", function() {
+                        scenarios.forEach(function(desc) {
 
-                        // Lets set up our intercept
-                        var captured_text = "";
-                        var unhook = tapit(_stream, function(txt) {
-                            captured_text += txt;
+                            it("when cb " + desc.returns
+                                + " a string, should capture " + streamDescriptor.name
+                                + " when initialized and not when it is unhooked", function(done) {
+
+                                _content = reset(streamDescriptor.inFile, content, _stream);
+
+                                var _stream = streamDescriptor.stream();
+
+                                // Lets set up our intercept
+                                var captured_text = {};
+                                captured_text.content = ""
+                                var unhook = tapit(_stream, desc.cb(captured_text));
+
+                                // Make sure we don't see the captured text yet.
+                                expect(captured_text.content).to.not.have.string(_content);
+
+                                // read from the console or the test file
+                                _stream.readAll(readResult => {
+                                    // Make sure we have the captured text.
+                                    expect(captured_text.content).to.have.string(readResult);
+
+                                    // Make sure the text is not captured after unhook
+
+                                    unhook();
+                                    captured_text.content = "";
+
+                                    var _stream = streamDescriptor.stream();
+
+                                    // read from the stream.
+                                    _stream.readAll(() => {
+                                        // Make sure we have not captured text.
+                                        expect(captured_text.content).to.be.equal("");
+                                        done();
+                                    })
+                                });
+                            });
                         });
-
-                        // read from the console or the test file
-                        var readResult;
-
-                        // Make sure we don't see the captured text yet.
-                        expect(captured_text).to.not.have.string(_content);
-
-                        // read from the stream.
-                        readResult = _stream.read().toString();
-
-                        // Make sure we have the captured text.
-                        expect(captured_text).to.have.string(readResult);
-
-                        // Make sure the text is not captured after unhook
-
-                        unhook();
-                        captured_text = "";
-
-                        // send to the stream.
-                        readResult = _stream.read();
-
-                        // Make sure we have not captured text.
-                        expect(captured_text).to.be.equal("");
-
                     });
 
-                    /*
-                     it("should modify output if callback returns a string", function() {
+/*
+                    _content = reset(streamDescriptor.inFile, content);
 
-                     var captured = [];
-                     var unhook = tapit(_stream, function(txt) {
-                     var mod = modified[captured.length];
-                     captured.push(mod);
-                     return mod;
+                    stream = streamDescriptor.stream();
+
+                    it("should modify output if callback returns a string", function() {
+
+                         var captured = [];
+                         var unhook = tapit(stream, function(txt) {
+                             var mod = modified[captured.length];
+                             captured.push(mod);
+                             return mod;
+                         });
+
+                         var modified = ["print-this!", "asdf", ""];
+
+                         content.forEach(function(txt) {
+                             _content = reset(streamDescriptor.inFile, txt);
+                             // send to stdout.
+                             stream.read();
+                             // make sure captured doesn't contain the original text
+                             expect(captured).to.not.contain(txt);
+                         });
+
+                         expect(captured).to.eql(modified);
+
+                         unhook();
+
                      });
-
-                     var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
-                     var modified = ["print-this!", "asdf", ""];
-
-                     arr.forEach(function(txt) {
-                     // send to stdout.
-                     _stream.read(txt);
-                     // make sure captured doesn't contain the original text
-                     expect(captured).to.not.contain(txt);
-                     });
-
-                     expect(captured).to.eql(modified);
-
-                     unhook();
-
-                     });
-                     */
+*/
                 })
             });
         });

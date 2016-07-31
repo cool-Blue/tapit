@@ -14,7 +14,7 @@ module.exports = function(stream, tap) {
         throw errors.inputTypeError;
 
     var old_writeStream_write = stream.write;
-    var old_readStream_read = stream._read;
+    var old_readStream_read = stream.read;
 
     if (isWritable)
         stream.write = (function(write) {
@@ -26,21 +26,22 @@ module.exports = function(stream, tap) {
         }(stream.write));
 
     if (isReadable)
-        stream._read = (function(read) {
+        stream.read = (function(read) {
             return function(string, encoding, fd) {
-                var args = [].slice.call(arguments);
-                args[0] = interceptor(string, tap);
-                read.apply(stream, args);
+                var args = [].slice.call(arguments),
+                    buff = read.apply(stream, args);
+                stream.unshift(interceptor(buff, tap));
+                return read.apply(stream, args);
             };
-        }(stream._read));
+        }(stream.read));
 
-    function interceptor(string, tap) {
+    function interceptor(buffer, tap) {
         // only intercept the string
-        var result = tap(string);
+        var result = tap(buffer);
         if(typeof result == 'string') {
-            string = result.replace(/\n$/, '') + (result && (/\n$/).test(string) ? '\n' : '');
+            buffer = result.replace(/\n$/, '') + (result && (/\n$/).test(buffer) ? '\n' : '');
         }
-        return string;
+        return buffer;
     }
 
     // puts back to original
