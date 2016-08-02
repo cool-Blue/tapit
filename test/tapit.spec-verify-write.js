@@ -42,76 +42,86 @@ describe("when passed a writable stream", function() {
 
         describe('when callback return nothing and ' + streamDescriptor.name + ' is passed', function() {
 
-            var _stream, captured_text, unhook;
+            var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
 
-            before(function() {
-                _stream = streamDescriptor.stream();
+            var _stream, captured = "", unhook;
 
+            _stream = streamDescriptor.stream();
+
+            function tap() {
                 // Lets set up our intercept
-                captured_text = "";
                 unhook = tapit(_stream, function(txt) {
-                    captured_text += txt;
+                    captured += txt;
                 });
-            });
+            }
 
-            describe("should capture when initialized...", function() {
+            describe("When hooked", function() {
 
-                // Lets try each of these pieces of text
-                var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
                 arr.forEach(function(txt, i, a) {
 
-                    it("before writing " + txt + " capture text should be clean", function(done) {
+                    it("before writing capture text should be clean", function(done) {
                         // Make sure we don't see the captured text yet.
-                        expect(captured_text, "captured text is clean").to.not.have.string(txt);
+                        expect(captured, "captured text is clean").to.not.include(txt);
                         done()
                     });
 
-                    it("should write " + txt + " to the stream", function(done) {
-                        var s = readAll.add(_stream);
+                    it("should write '" + txt + "' to the stream", function(done) {
+                        var s = readAll.readBack(_stream);
+                        // need to limit the time that the stream is tapped because
+                        // mocha writes to stdout and this traffic will interfere.
+                        tap();
                         // send to the stream.
                         s.write(txt, "utf8", function(e) {
                             if(s.readAll)
                                 s.readAll(function(body) {
                                     // Make sure we have wirtten the text.
                                     expect(body, "text was written").to.have.string(txt, "txt to have");
+                                    unhook();
                                     done()
                                 });
                             else {
                                 // need to pipe to a file in the command line and check the result
                                 expect(true).to.equal(true);
+                                unhook();
                                 done()
                             }
                         });
                     });
 
                     // Make sure we have the captured text.
-                    it("should capture the text", function(done) {
-                        expect(captured_text, "text was captured").to.have.string(txt);
+                    it("should capture '"+ txt + "'", function(done) {
+                        expect(captured).to.have.string(txt);
                         done()
                     })
+                });
 
+                it("should accumulate the capture", function(done) {
+                    expect(captured).to.eql(arr.reduce((res, l) => res + l, ""));
+                    done()
                 });
             });
 
             describe("...and not when un-hooked", function() {
-                it("...and should not capture", function() {
-                    unhook();
-                    captured_text = "";
 
-                    arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
+                before(tap);
+
+                it("should not capture", function() {
+                    unhook();
+                    captured = "";
+
                     arr.forEach(function(txt) {
 
                         // send to the stream.
                         _stream.write(txt);
 
                         // Make sure we have not captured text.
-                        expect(captured_text).to.be.equal("");
+                        expect(captured).to.be.equal("");
                     });
                 })
             });
         });
 
-        describe('When callback returns a string and ' + streamDescriptor.name + ' is passed', function() {
+        describe('When callback returns a modified string and ' + streamDescriptor.name + ' is passed', function() {
 
             var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
             var modified = ["print-this!", "asdf", ""];
@@ -121,7 +131,6 @@ describe("when passed a writable stream", function() {
             _stream = streamDescriptor.stream();
 
             function tap() {
-                // captured = [];
                 unhook = tapit(_stream, function(txt) {
                     var mod = modified[captured.length];
                     captured.push(mod);
@@ -133,10 +142,14 @@ describe("when passed a writable stream", function() {
 
                 arr.forEach(function(txt, i) {
 
-                    // send to the stream.
+                    it("before writing capture text should be clean", function(done) {
+                        // Make sure we don't see the captured text yet.
+                        expect(captured, "captured text is clean").to.not.include(txt);
+                        done()
+                    });
 
-                    it("should write " + modified[i] + " to the file", function(done) {
-                        var s = readAll.add(_stream);
+                    it("should write '" + modified[i] + "' to the file", function(done) {
+                        var s = readAll.readBack(_stream);
                         // need to limit the time that the stream is tapped because
                         // mocha writes to stdout and this traffic will interfere.
                         tap();
@@ -145,7 +158,7 @@ describe("when passed a writable stream", function() {
                             if(s.readAll)
                                 s.readAll(function(body) {
                                     // Make sure we have written the text.
-                                    expect(body).to.have.string(modified[i]);
+                                    expect(body, "text was written").to.have.string(modified[i], "txt to have");
                                     unhook();
                                     done()
                                 });
@@ -159,7 +172,7 @@ describe("when passed a writable stream", function() {
                     });
 
                     // make sure captured doesn't contain the original text
-                    it("should capture the modified text", function(done) {
+                    it("should capture '" + modified[i] + "'", function(done) {
                         expect(captured[i]).to.eql(modified[i]);
                         done()
                     })
@@ -175,18 +188,17 @@ describe("when passed a writable stream", function() {
 
                 before(tap);
 
-                it("...and should not capture", function() {
+                it("should not capture", function() {
                     unhook();
-                    captured_text = "";
+                    captured = "";
 
-                    arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
                     arr.forEach(function(txt) {
 
                         // send to the stream.
                         _stream.write(txt);
 
                         // Make sure we have not captured text.
-                        expect(captured_text).to.be.equal("");
+                        expect(captured).to.be.equal("");
                     });
                 })
             });
@@ -197,7 +209,14 @@ describe("when passed a readable stream", function() {
 
     var content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
 
-    function reset(inFile, content, stream) {
+    /**
+     * Re-initialises the test input file with supplied content
+     * @function
+     * @param {string} inFile
+     * @param {string[]} content an array of lines to be written
+     * @returns {string} content written to the file
+     */
+    function reset(inFile, content) {
 
         var _content;
 
@@ -285,7 +304,7 @@ describe("when passed a readable stream", function() {
 
                     scenarios.forEach(function(desc) {
                         var _stream, captured_text, unhook;
-                        var _content = reset(streamDescriptor.inFile, content, _stream);
+                        var _content = reset(streamDescriptor.inFile, content);
 
                         describe("when cb " + desc.returns, function() {
 
@@ -307,10 +326,10 @@ describe("when passed a readable stream", function() {
 
                                     // read from the console or the test file
                                     // and return the result to a callback
-                                    _stream.readAll(readResult => {
+                                    _stream.readAll(body => {
                                         // Make sure we have the captured text
                                         // and it matches the file contents
-                                        expect(captured_text.content).to.have.string(readResult);
+                                        expect(captured_text.content).to.have.string(body);
                                         done();
                                     })
                                 }

@@ -6,7 +6,7 @@ const fs     = require('fs'),
 
 module.exports = readAll;
 
-function readAllAdd(s) {
+function readBack(s) {
 
     var readBackStream;
 
@@ -55,4 +55,4 @@ function readAll(next) {
     return stream;
 }
 
-readAll.add = readAllAdd;
+readAll.readBack = readBack;
