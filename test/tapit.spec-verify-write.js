@@ -12,231 +12,197 @@ const expect    = require("chai").expect,
  */
 
 function logStreamEvents(s) {
-    return
+    // return
     // log events from the Stream
     var streamEvents = ['pipe', 'unpipe', 'finish', 'cork', 'close', 'drain', 'error', 'end', 'readable'];
     logEvents.open((s), streamEvents);
 
 }
 
+/**
+ * Re-initialises the test input file with supplied content
+ * @function
+ * @param {string} inFile
+ * @param {string[]} content an array of lines to be written
+ * @returns {string} content written to the file
+ */
+function resetFile(inFile, content) {
+
+    var _content;
+
+    //resetFile the test input
+    try {
+        fs.unlinkSync(inFile);
+    } catch(e) {
+        // just ignore it
+        console.warn("WARNING: inFile does not exist")
+    }
+
+    _content = content
+        ? content.length
+           ? content.reduce(function(res, line) {
+                return res + line + "\n";
+            }, "")
+           : content
+        : "";
+    fs.writeFileSync(inFile, _content);
+    //return the file content for reference
+    return _content;
+}
+
 describe("when passed a writable stream", function() {
+
     [
         {
-            name: 'writeStream',
-            outFile: './test/output/out-file.txt',
-            stream: function() {
-                var s = fs.createWriteStream(this.outFile);
-                s.name = this.name;
-                logStreamEvents(s);
-                return s
+            name: "through",
+            captured0:"",
+            captured: "",
+            unhook: undefined,
+            tap: function(stream) {
+                // Lets set up our intercept
+                this.unhook = tapit(stream, function(txt) {
+                    this.captured += txt;
+                }.bind(this));
+            },
+            init: function(){
+                this.captured = this.captured0;
             }
         },
         {
-            name: 'stdout',
-            stream: function() {
-                return process.stdout
+            name: "transform",
+            captured0: [],
+            captured: [],
+            unhook: undefined,
+            tap: function (stream) {
+                this.unhook = tapit(stream, function(txt) {
+                    var mod = this.modified[this.captured.length];
+                    this.captured.push(mod);
+                    return mod;
+                }.bind(this));
+            },
+            modified: ["print-this!", "asdf", "78r9ya"],
+            init: function(){
+                this.captured = this.captured0;
             }
         },
+    ].forEach(function(mode){
+        [
+            {
+                name: 'writeStream',
+                outFile: './test/output/out-file.txt',
+                stream: function() {
+                    var s = fs.createWriteStream(this.outFile);
+                    s.name = this.name;
+                    logStreamEvents(s);
+                    return s
+                },
+                init: function(){
+                    resetFile(this.outFile);
+                }
+            },
+            {
+                name: 'stdout',
+                stream: function() {
+                    return process.stdout
+                },
+                init: function(){}
+            },
 
-    ].forEach(function(streamDescriptor) {
+        ].forEach(function(streamDescriptor) {
 
-        describe('when callback return nothing and ' + streamDescriptor.name + ' is passed', function() {
+            describe('when in '+ mode.name +' mode and '
+                + streamDescriptor.name + ' is passed', function() {
 
-            var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
+                var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
 
-            var _stream, captured = "", unhook;
+                var _stream;
 
-            _stream = streamDescriptor.stream();
 
-            function tap() {
-                // Lets set up our intercept
-                unhook = tapit(_stream, function(txt) {
-                    captured += txt;
-                });
-            }
-
-            describe("When hooked", function() {
-
-                arr.forEach(function(txt, i, a) {
-
-                    it("before writing capture text should be clean", function(done) {
-                        // Make sure we don't see the captured text yet.
-                        expect(captured, "captured text is clean").to.not.include(txt);
-                        done()
-                    });
-
-                    it("should write '" + txt + "' to the stream", function(done) {
-                        var s = readAll.readBack(_stream);
-                        // need to limit the time that the stream is tapped because
-                        // mocha writes to stdout and this traffic will interfere.
-                        tap();
-                        // send to the stream.
-                        s.write(txt, "utf8", function(e) {
-                            if(s.readAll)
-                                s.readAll(function(body) {
-                                    // Make sure we have wirtten the text.
-                                    expect(body, "text was written").to.have.string(txt, "txt to have");
-                                    unhook();
-                                    done()
-                                });
-                            else {
-                                // need to pipe to a file in the command line and check the result
-                                expect(true).to.equal(true);
-                                unhook();
-                                done()
-                            }
-                        });
-                    });
-
-                    // Make sure we have the captured text.
-                    it("should capture '"+ txt + "'", function(done) {
-                        expect(captured).to.have.string(txt);
-                        done()
-                    })
-                });
-
-                it("should accumulate the capture", function(done) {
-                    expect(captured).to.eql(arr.reduce((res, l) => res + l, ""));
+                it("reset the stream", function (done){
+                    _stream = streamDescriptor.stream();
                     done()
                 });
-            });
 
-            describe("...and not when un-hooked", function() {
+                describe("When hooked", function() {
 
-                before(tap);
+                    arr.forEach(function(txt, i, a) {
 
-                it("should not capture", function() {
-                    unhook();
-                    captured = "";
+                        var output = mode.modified ? mode.modified[i] : txt;
 
-                    arr.forEach(function(txt) {
-
-                        // send to the stream.
-                        _stream.write(txt);
-
-                        // Make sure we have not captured text.
-                        expect(captured).to.be.equal("");
-                    });
-                })
-            });
-        });
-
-        describe('When callback returns a modified string and ' + streamDescriptor.name + ' is passed', function() {
-
-            var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
-            var modified = ["print-this!", "asdf", ""];
-
-            var _stream, captured = [], unhook;
-
-            _stream = streamDescriptor.stream();
-
-            function tap() {
-                unhook = tapit(_stream, function(txt) {
-                    var mod = modified[captured.length];
-                    captured.push(mod);
-                    return mod;
-                });
-            }
-
-            describe("When hooked", function() {
-
-                arr.forEach(function(txt, i) {
-
-                    it("before writing capture text should be clean", function(done) {
-                        // Make sure we don't see the captured text yet.
-                        expect(captured, "captured text is clean").to.not.include(txt);
-                        done()
-                    });
-
-                    it("should write '" + modified[i] + "' to the file", function(done) {
-                        var s = readAll.readBack(_stream);
-                        // need to limit the time that the stream is tapped because
-                        // mocha writes to stdout and this traffic will interfere.
-                        tap();
-                        // send to the stream.
-                        s.write(txt, "utf8", function(e) {
-                            if(s.readAll)
-                                s.readAll(function(body) {
-                                    // Make sure we have written the text.
-                                    expect(body, "text was written").to.have.string(modified[i], "txt to have");
-                                    unhook();
-                                    done()
-                                });
-                            else {
-                                // need to pipe to a file in the command line and check the result
-                                expect(true).to.equal(true);
-                                unhook();
-                                done()
-                            }
+                        it("before writing capture text should be clean", function(done) {
+                            // Make sure we don't see the captured text yet.
+                            expect(mode.captured, "captured text is clean").to.not.include(txt);
+                            done()
                         });
+
+                        it("should write '" + output + "' to the stream", function(done) {
+                            var s = readAll.readBack(_stream);
+                            // need to limit the time that the stream is tapped because
+                            // mocha writes to stdout and this traffic will interfere.
+                            mode.tap(_stream);
+                            // send to the stream.
+                            s.write(txt, "utf8", function(e) {
+                                if(s.readAll)
+                                    s.readAll(function(body) {
+                                        // Make sure we have wirtten the text.
+                                        expect(body, "text was written")
+                                            .to.have.string(output, "txt to have");
+                                        mode.unhook();
+                                        done()
+                                    });
+                                else {
+                                    // need to pipe to a file in the command line and check the result
+                                    expect(true).to.equal(true);
+                                    mode.unhook();
+                                    done()
+                                }
+                            });
+                        });
+
+                        // Make sure we have the captured text.
+                        it("should capture '" + output + "'", function(done) {
+                            expect(mode.captured).to.include(output);
+                            done()
+                        })
                     });
 
-                    // make sure captured doesn't contain the original text
-                    it("should capture '" + modified[i] + "'", function(done) {
-                        expect(captured[i]).to.eql(modified[i]);
+                    it("should accumulate the capture", function(done) {
+                        expect(mode.captured)
+                            .to.eql(mode.modified || arr.reduce((res, l) => res + l, ""));
                         done()
+                    });
+                });
+
+                describe("...and not when un-hooked", function() {
+
+                    it("reset the stream", function (done){
+                        _stream = streamDescriptor.stream();
+                        done()
+                    });
+
+                    it("should not capture", function() {
+                        mode.tap(_stream);
+                        mode.unhook();
+                        mode.captured = mode.captured0;
+
+                        arr.forEach(function(txt) {
+
+                            // send to the stream.
+                            _stream.write(txt);
+
+                            // Make sure we have not captured text.
+                            expect(mode.captured).to.be.equal(mode.captured0);
+                        });
                     })
                 });
-
-                it("should accumulate the capture", function(done) {
-                    expect(captured).to.eql(modified);
-                    done()
-                });
-            });
-
-            describe("...and not when un-hooked", function() {
-
-                before(tap);
-
-                it("should not capture", function() {
-                    unhook();
-                    captured = "";
-
-                    arr.forEach(function(txt) {
-
-                        // send to the stream.
-                        _stream.write(txt);
-
-                        // Make sure we have not captured text.
-                        expect(captured).to.be.equal("");
-                    });
-                })
             });
         });
-    });
+    })
 });
 describe("when passed a readable stream", function() {
 
+
     var content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
-
-    /**
-     * Re-initialises the test input file with supplied content
-     * @function
-     * @param {string} inFile
-     * @param {string[]} content an array of lines to be written
-     * @returns {string} content written to the file
-     */
-    function reset(inFile, content) {
-
-        var _content;
-
-        //reset the test input
-        try {
-            fs.unlinkSync(inFile);
-        } catch(e) {
-            // just ignore it
-            console.warn("WARNING: inFile does not exist")
-        }
-
-        _content = content.reduce(function(res, line) {
-            return res + line + "\n";
-        }, "");
-        fs.writeFileSync(inFile, _content);
-
-        //return the file content for reference
-        return _content;
-    }
-
     [
         /*
          {
@@ -304,7 +270,7 @@ describe("when passed a readable stream", function() {
 
                     scenarios.forEach(function(desc) {
                         var _stream, captured_text, unhook;
-                        var _content = reset(streamDescriptor.inFile, content);
+                        var _content = resetFile(streamDescriptor.inFile, content);
 
                         describe("when cb " + desc.returns, function() {
 
@@ -354,7 +320,7 @@ describe("when passed a readable stream", function() {
             });
 
             /*
-             _content = reset(streamDescriptor.inFile, content);
+             _content = resetFile(streamDescriptor.inFile, content);
 
              stream = streamDescriptor.stream();
 
@@ -370,7 +336,7 @@ describe("when passed a readable stream", function() {
              var modified = ["print-this!", "asdf", ""];
 
              content.forEach(function(txt) {
-             _content = reset(streamDescriptor.inFile, txt);
+             _content = resetFile(streamDescriptor.inFile, txt);
              // send to stdout.
              stream.read();
              // make sure captured doesn't contain the original text
