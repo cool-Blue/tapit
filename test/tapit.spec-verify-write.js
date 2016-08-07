@@ -1,6 +1,8 @@
 const expect    = require("chai").expect,
       fs        = require('fs'),
-      readAll   = require('../readstream'),
+      observableStreams = require('../lib/observable-streams'),
+      ObservableWriteStream = observableStreams.ObservableWriteStream,
+      ManagedReadStream = observableStreams.ManagedReadStream,
       eventsLog = './test/output/event-log.txt',
       logEvents = require('@cool-blue/logevents')(eventsLog),
       tapit     = require("../tapit.js");
@@ -91,10 +93,11 @@ describe("when passed a writable stream", function() {
                 name: 'writeStream',
                 outFile: './test/output/out-file.txt',
                 stream: function() {
-                    var s = fs.createWriteStream(this.outFile);
+                    // var s = fs.createWriteStream(this.outFile);
+                    var s = new ObservableWriteStream(this.outFile);
                     s.name = this.name;
                     logStreamEvents(s);
-                    return readAll.readBack(s)
+                    return s
                 },
                 init: function() {
 
@@ -125,7 +128,7 @@ describe("when passed a writable stream", function() {
                         done()
                     });
 
-                    arr.forEach(function(txt, i, a) {
+                    arr.forEach(function(txt, i) {
 
                         var output = mode.modified ? mode.modified[i] : txt;
 
@@ -142,6 +145,10 @@ describe("when passed a writable stream", function() {
                             // send to the stream.
                             _stream.write(txt, "utf8", function(e) {
                                 mode.unhook();
+
+                                // Make sure we have the captured text.
+                                expect(mode.captured).to.include(output);
+
                                 if(_stream.readAll)
                                     _stream.readAll(function(body) {
                                         // Make sure we have written the text.
@@ -156,12 +163,6 @@ describe("when passed a writable stream", function() {
                                 }
                             });
                         });
-
-                        // Make sure we have the captured text.
-                        it("should capture '" + output + "'", function(done) {
-                            expect(mode.captured).to.include(output);
-                            done()
-                        })
                     });
 
                     it("should accumulate the capture", function(done) {
@@ -183,21 +184,20 @@ describe("when passed a writable stream", function() {
 
                         var output = txt;
 
-                        // need to limit the time that the stream is tapped because
-                        // mocha writes to stdout and this traffic will interfere.
-                        it("is hooked and  un-hooked", function(done) {
-                            mode.tap(_stream);
-                            mode.unhook();
-                            done()
-                        });
-
                         // send to the stream.
                         it("should write '" + output + "' to the stream", function(done) {
-                            var s = readAll.readBack(_stream);
+                            // need to limit the time that the stream is tapped because
+                            // mocha writes to stdout and this traffic will interfere.
+                            mode.tap(_stream);
+                            mode.unhook();
                             // send to the stream.
-                            s.write(txt, "utf8", function(e) {
-                                if(s.readAll)
-                                    s.readAll(function(body) {
+                            _stream.write(txt, "utf8", function(e) {
+
+                                // Make sure we have not captured text.
+                                expect(mode.captured).to.be.eql(mode.captured0());
+
+                                if(_stream.readAll)
+                                    _stream.readAll(function(body) {
                                         // Make sure we have written the text.
                                         expect(body, "text was written")
                                             .to.have.string(output, "txt to have");
@@ -211,10 +211,6 @@ describe("when passed a writable stream", function() {
                             });
                         });
 
-                        // Make sure we have not captured text.
-                        it("should not capture the text", function(){
-                            expect(mode.captured).to.be.eql(mode.captured0())
-                        });
                     });
                 });
             });
@@ -238,12 +234,9 @@ describe("when passed a readable stream", function() {
             name: 'readStream',
             inFile: './test/fixtures/input.txt',
             stream: function() {
-                var s = fs.createReadStream(this.inFile);
-                s.readAll = readAll;
-
+                var s = new ManagedReadStream(this.inFile);
                 s.name = this.name;
                 logStreamEvents(s);
-
                 return s
             },
             inStream: function() {
