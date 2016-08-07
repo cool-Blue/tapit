@@ -12,11 +12,12 @@ function readBack(s) {
 
     if(s.path) {
         // add a method onto the stream to read back the temp file once
-        readBackStream = fs.createReadStream(s.path);
-        s.readAll = readAll.bind(readBackStream);
+        s.readAll = function(next){
+            readAll.bind(fs.createReadStream(this.path))(next);
+        };
     }
     else {
-        // need to pipe to a file in the command line and check the result
+        // need to pipe stdout to a file in the command line and check the result
     }
 
     return s
@@ -38,10 +39,10 @@ function readAll(next) {
     }
 
     function onClose(fromreadit) {
-        next.bind(stream)(body)
-
         stream.removeListener('readable', readChunk);
         stream.removeListener('close', onClose);
+
+        next.bind(stream)(body)
     }
 
     stream

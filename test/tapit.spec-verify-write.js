@@ -40,10 +40,10 @@ function resetFile(inFile, content) {
 
     _content = content
         ? content.length
-           ? content.reduce(function(res, line) {
-                return res + line + "\n";
-            }, "")
-           : content
+                   ? content.reduce(function(res, line) {
+        return res + line + "\n";
+    }, "")
+                   : content
         : "";
     fs.writeFileSync(inFile, _content);
     //return the file content for reference
@@ -55,7 +55,7 @@ describe("when passed a writable stream", function() {
     [
         {
             name: "through",
-            captured0:"",
+            captured0: function(){ return ""},  // need a distinct, new instance
             captured: "",
             unhook: undefined,
             tap: function(stream) {
@@ -64,16 +64,16 @@ describe("when passed a writable stream", function() {
                     this.captured += txt;
                 }.bind(this));
             },
-            init: function(){
-                this.captured = this.captured0;
+            init: function() {
+                this.captured = this.captured0();
             }
         },
         {
             name: "transform",
-            captured0: [],
+            captured0: function() { return new Array(0) },  // need a distinct, new instance
             captured: [],
             unhook: undefined,
-            tap: function (stream) {
+            tap: function(stream) {
                 this.unhook = tapit(stream, function(txt) {
                     var mod = this.modified[this.captured.length];
                     this.captured.push(mod);
@@ -81,11 +81,11 @@ describe("when passed a writable stream", function() {
                 }.bind(this));
             },
             modified: ["print-this!", "asdf", "78r9ya"],
-            init: function(){
-                this.captured = this.captured0;
+            init: function() {
+                this.captured = this.captured0();
             }
         },
-    ].forEach(function(mode){
+    ].forEach(function(mode) {
         [
             {
                 name: 'writeStream',
@@ -94,10 +94,10 @@ describe("when passed a writable stream", function() {
                     var s = fs.createWriteStream(this.outFile);
                     s.name = this.name;
                     logStreamEvents(s);
-                    return s
+                    return readAll.readBack(s)
                 },
-                init: function(){
-                    resetFile(this.outFile);
+                init: function() {
+
                 }
             },
             {
@@ -105,25 +105,25 @@ describe("when passed a writable stream", function() {
                 stream: function() {
                     return process.stdout
                 },
-                init: function(){}
+                init: function() {}
             },
 
-        ].forEach(function(streamDescriptor) {
+        ].forEach(function(streamType) {
 
-            describe('when in '+ mode.name +' mode and '
-                + streamDescriptor.name + ' is passed', function() {
+            describe('when in ' + mode.name + ' mode and '
+                + streamType.name + ' is passed', function() {
 
                 var arr = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
 
                 var _stream;
 
-
-                it("reset the stream", function (done){
-                    _stream = streamDescriptor.stream();
-                    done()
-                });
-
                 describe("When hooked", function() {
+
+                    it("reset the stream for hooked", function(done) {
+                        _stream = streamType.stream();
+                        mode.init();
+                        done()
+                    });
 
                     arr.forEach(function(txt, i, a) {
 
@@ -136,24 +136,22 @@ describe("when passed a writable stream", function() {
                         });
 
                         it("should write '" + output + "' to the stream", function(done) {
-                            var s = readAll.readBack(_stream);
                             // need to limit the time that the stream is tapped because
                             // mocha writes to stdout and this traffic will interfere.
                             mode.tap(_stream);
                             // send to the stream.
-                            s.write(txt, "utf8", function(e) {
-                                if(s.readAll)
-                                    s.readAll(function(body) {
-                                        // Make sure we have wirtten the text.
+                            _stream.write(txt, "utf8", function(e) {
+                                mode.unhook();
+                                if(_stream.readAll)
+                                    _stream.readAll(function(body) {
+                                        // Make sure we have written the text.
                                         expect(body, "text was written")
                                             .to.have.string(output, "txt to have");
-                                        mode.unhook();
                                         done()
                                     });
                                 else {
                                     // need to pipe to a file in the command line and check the result
                                     expect(true).to.equal(true);
-                                    mode.unhook();
                                     done()
                                 }
                             });
@@ -175,32 +173,55 @@ describe("when passed a writable stream", function() {
 
                 describe("...and not when un-hooked", function() {
 
-                    it("reset the stream", function (done){
-                        _stream = streamDescriptor.stream();
+                    it("reset the stream for unhooked", function(done) {
+                        _stream = streamType.stream();
+                        mode.init();
                         done()
                     });
 
-                    it("should not capture", function() {
-                        mode.tap(_stream);
-                        mode.unhook();
-                        mode.captured = mode.captured0;
+                    arr.forEach(function(txt, i) {
 
-                        arr.forEach(function(txt) {
+                        var output = txt;
 
-                            // send to the stream.
-                            _stream.write(txt);
-
-                            // Make sure we have not captured text.
-                            expect(mode.captured).to.be.equal(mode.captured0);
+                        // need to limit the time that the stream is tapped because
+                        // mocha writes to stdout and this traffic will interfere.
+                        it("is hooked and  un-hooked", function(done) {
+                            mode.tap(_stream);
+                            mode.unhook();
+                            done()
                         });
-                    })
+
+                        // send to the stream.
+                        it("should write '" + output + "' to the stream", function(done) {
+                            var s = readAll.readBack(_stream);
+                            // send to the stream.
+                            s.write(txt, "utf8", function(e) {
+                                if(s.readAll)
+                                    s.readAll(function(body) {
+                                        // Make sure we have written the text.
+                                        expect(body, "text was written")
+                                            .to.have.string(output, "txt to have");
+                                        done()
+                                    });
+                                else {
+                                    // need to pipe to a file in the command line and check the result
+                                    expect(true).to.equal(true);
+                                    done()
+                                }
+                            });
+                        });
+
+                        // Make sure we have not captured text.
+                        it("should not capture the text", function(){
+                            expect(mode.captured).to.be.eql(mode.captured0())
+                        });
+                    });
                 });
             });
         });
     })
 });
 describe("when passed a readable stream", function() {
-
 
     var content = ["capture-this!", "日本語", "-k21.12-0k-ª–m-md1∆º¡∆ªº"];
     [
